@@ -1,7 +1,7 @@
 use webrtc_core::rtp::{RtpHeader, CsrcList, Packetizer, PacketizerConfig, Depacketizer, MediaPacket, PacketType};
 
 fn main() {
-    println!("=== RTP Packetizer/Depacketizer Example ===\n");
+    println!("RTP Pipeline Example\n");
 
     let cfg = PacketizerConfig {
         payload_type: 96,
@@ -12,45 +12,38 @@ fn main() {
         initial_timestamp: 90000,
     };
     let mut packetizer = Packetizer::new(cfg);
-    println!("Created packetizer with PT={}, SSRC={:#010X}", 
-        cfg.payload_type, cfg.ssrc);
+    println!("PT: {}, SSRC: {:#X}", cfg.payload_type, cfg.ssrc);
 
     let video_frame = vec![0xAAu8; 3000];
     let mut out_pkts: Vec<MediaPacket> = (0..8).map(|_| MediaPacket::default()).collect();
     
-    println!("\n=== Packetization ===");
-    println!("Input frame: {} bytes", video_frame.len());
+    println!("\nPacketization:");
+    println!("Input: {} bytes", video_frame.len());
     let n = packetizer.packetize(&video_frame, 3000, PacketType::Video, &mut out_pkts);
-    println!("Output: {} RTP packets", n);
+    println!("Output: {} packets", n);
 
     for i in 0..n {
-        let pkt = &out_pkts[i];
-        if let Some(hdr) = pkt.parse_header() {
-            println!("  Packet {}: seq={}, ts={}, marker={}, {} bytes",
-                i, hdr.sequence_number, hdr.timestamp, hdr.marker, pkt.len);
+        if let Some(hdr) = out_pkts[i].parse_header() {
+            println!("  [{}] seq={} marker={} {} bytes", i, hdr.sequence_number, hdr.marker, out_pkts[i].len);
         }
     }
 
-    println!("\n=== Depacketization ===");
+    println!("\nDepacketization:");
     let mut depacketizer = Depacketizer::new(64);
-    let mut reassembled_bytes = 0usize;
-    let mut frame_count = 0usize;
+    let mut total = 0usize;
 
     for i in 0..n {
         let raw = &out_pkts[i].data[..out_pkts[i].len];
-        let mut payload_buf = vec![0u8; 2000];
-        
-        if let Ok((hdr, plen)) = depacketizer.process(raw, &mut payload_buf) {
-            reassembled_bytes += plen;
+        let mut buf = vec![0u8; 2000];
+        if let Ok((hdr, plen)) = depacketizer.process(raw, &mut buf) {
+            total += plen;
             if hdr.marker {
-                frame_count += 1;
-                println!("  Frame {} complete: seq={}, total {} bytes reassembled",
-                    frame_count, hdr.sequence_number, reassembled_bytes);
+                println!("Frame complete: {} bytes", total);
             }
         }
     }
 
-    println!("\n=== RTP Header Parsing ===");
+    println!("\nRTP Header:");
     let hdr = RtpHeader {
         version: 2,
         padding: false,
@@ -67,21 +60,7 @@ fn main() {
     };
     
     let mut buf = [0u8; 64];
-    let written = hdr.write_into(&mut buf).unwrap();
-    println!("Serialized header: {} bytes", written);
-    
-    let parsed = RtpHeader::parse(&buf[..written]).unwrap();
-    println!("Parsed: {}", parsed);
-    println!("  Version: {}", parsed.version);
-    println!("  Marker: {}", parsed.marker);
-    println!("  PT: {}", parsed.payload_type);
-    println!("  Seq: {}", parsed.sequence_number);
-    println!("  Timestamp: {}", parsed.timestamp);
-    println!("  SSRC: {:#010X}", parsed.ssrc);
-
-    println!("\n=== Out-of-Order Handling ===");
-    println!("Out-of-order packets detected: {}", depacketizer.out_of_order_count());
-    println!("Total packets processed: {}", depacketizer.total_received());
-
-    println!("\n=== RTP Example Complete ===");
+    hdr.write_into(&mut buf).unwrap();
+    let parsed = RtpHeader::parse(&buf).unwrap();
+    println!("{}", parsed);
 }
