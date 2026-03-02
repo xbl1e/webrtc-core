@@ -1,6 +1,6 @@
 [package]
 name = "webrtc-core"
-version = "0.6.1"
+version = "0.6.3"
 edition = "2021"
 authors = ["xbl1e"]
 description = "Sub-microsecond WebRTC media core with zero-copy architecture"
