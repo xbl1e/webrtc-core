@@ -1,6 +1,6 @@
 [package]
 name = "webrtc-core"
-version = "0.6.4"
+version = "0.6.5"
 edition = "2021"
 authors = ["xbl1e"]
 description = "Sub-microsecond WebRTC media core with zero-copy architecture"
@@ -31,3 +31,6 @@ windows-sys = { version = "0.48" }
 
 [features]
 default = []
+
+[package.metadata.docs.rs]
+all-features = true
