@@ -61,8 +61,8 @@ impl EngineBuilder {
 }
 
 pub struct EngineHandle {
-    slab: Arc<SlabAllocator>,
-    idx_ring: Arc<IndexRing>,
+    pub slab: Arc<SlabAllocator>,
+    pub idx_ring: Arc<IndexRing>,
     rtcp_queue: Arc<RtcpSendQueue>,
     session: Arc<std::sync::RwLock<SessionState>>,
     media_handle: Option<JoinHandle<()>>,
