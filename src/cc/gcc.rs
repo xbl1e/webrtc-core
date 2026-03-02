@@ -40,8 +40,8 @@ impl Default for GccConfig {
 }
 
 pub struct DelayBasedBwe {
-    prev_group_delay_sum_ns: AtomicI64,
-    prev_group_count: AtomicU32,
+    _prev_group_delay_sum_ns: AtomicI64,
+    _prev_group_count: AtomicU32,
     delay_gradient: AtomicI64,
     overuse_start_ns: AtomicU64,
     threshold: AtomicI64,
@@ -51,8 +51,8 @@ pub struct DelayBasedBwe {
 impl DelayBasedBwe {
     pub fn new() -> Self {
         Self {
-            prev_group_delay_sum_ns: AtomicI64::new(0),
-            prev_group_count: AtomicU32::new(0),
+            _prev_group_delay_sum_ns: AtomicI64::new(0),
+            _prev_group_count: AtomicU32::new(0),
             delay_gradient: AtomicI64::new(0),
             overuse_start_ns: AtomicU64::new(0),
             threshold: AtomicI64::new(12_500_000),

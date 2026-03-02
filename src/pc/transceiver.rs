@@ -117,10 +117,10 @@ impl CodecParameters {
 pub struct RtpSender {
     pub ssrc: u32,
     pub rtx_ssrc: u32,
-    active: AtomicBool,
+    _active: AtomicBool,
     packets_sent: AtomicU32,
     bytes_sent: std::sync::atomic::AtomicU64,
-    codec: Mutex<Option<CodecParameters>>,
+    _codec: Mutex<Option<CodecParameters>>,
 }
 
 impl RtpSender {
@@ -128,15 +128,15 @@ impl RtpSender {
         Self {
             ssrc,
             rtx_ssrc: ssrc + 1,
-            active: AtomicBool::new(true),
+            _active: AtomicBool::new(true),
             packets_sent: AtomicU32::new(0),
             bytes_sent: std::sync::atomic::AtomicU64::new(0),
-            codec: Mutex::new(None),
+            _codec: Mutex::new(None),
         }
     }
 
     pub fn set_codec(&self, codec: CodecParameters) {
-        *self.codec.lock().unwrap() = Some(codec);
+        *self._codec.lock().unwrap() = Some(codec);
     }
 
     pub fn record_sent(&self, bytes: usize) {
@@ -153,30 +153,30 @@ impl RtpSender {
     }
 
     pub fn is_active(&self) -> bool {
-        self.active.load(Ordering::Relaxed)
+        self._active.load(Ordering::Relaxed)
     }
 
     pub fn set_active(&self, active: bool) {
-        self.active.store(active, Ordering::Relaxed);
+        self._active.store(active, Ordering::Relaxed);
     }
 }
 
 pub struct RtpReceiver {
     pub ssrc: u32,
-    active: AtomicBool,
+    _active: AtomicBool,
     packets_received: AtomicU32,
     bytes_received: std::sync::atomic::AtomicU64,
-    codec: Mutex<Option<CodecParameters>>,
+    _codec: Mutex<Option<CodecParameters>>,
 }
 
 impl RtpReceiver {
     pub fn new(ssrc: u32) -> Self {
         Self {
             ssrc,
-            active: AtomicBool::new(true),
+            _active: AtomicBool::new(true),
             packets_received: AtomicU32::new(0),
             bytes_received: std::sync::atomic::AtomicU64::new(0),
-            codec: Mutex::new(None),
+            _codec: Mutex::new(None),
         }
     }
 
