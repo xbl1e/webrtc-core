@@ -1,6 +1,7 @@
 pub mod affinity;
 pub mod byte_ring;
 pub mod clock;
+pub mod dtls;
 pub mod dtls_key;
 pub mod engine_handle;
 pub mod engine_shard;
@@ -26,6 +27,7 @@ pub mod pc;
 pub use affinity::set_thread_affinity;
 pub use byte_ring::ByteRing;
 pub use clock::ClockDriftEstimator;
+pub use dtls::{DtlsContext, DtlsEndpoint, DtlsRole, DtlsState, DtlsError, DtlsRecordHeader, DtlsCipherSuite, DtlsSecurityParameters};
 pub use dtls_key::{derive_srtp_master_and_salt, KeyDeriveError};
 pub use engine_handle::{EngineHandle, EngineBuilder};
 pub use index_ring::IndexRing;
@@ -44,5 +46,5 @@ pub use cc::{GccController, GccConfig, AimdController, TwccAggregator, TwccFeedb
 pub use e2ee::{SFrameContext, SFrameConfig, KeyStore, SFrameError};
 pub use ice::{IceCandidate, IceAgent, IceRole, IceState, StunMessage, CandidateType, TransportProtocol, StunAttribute, StunMethod, StunClass, StunError, IceAgentConfig};
 pub use observability::{EngineMetrics, StreamMetrics, MetricsSnapshot};
-pub use pc::{PeerConnection, PeerConnectionState, SignalingState, RtcConfiguration, IceServer, IceTransportPolicy, BundlePolicy, RtcStatsReport, RtcStats, InboundRtpStats, OutboundRtpStats, IceCandidatePairStats, SessionDescription, RtpTransceiver, TransceiverDirection, MediaKind};
+pub use pc::{PeerConnection, PeerConnectionState, SignalingState, RtcConfiguration, IceServer, IceTransportPolicy, BundlePolicy, RtcStatsReport, RtcStats, InboundRtpStats, OutboundRtpStats, IceCandidatePairStats, SessionDescription, RtpTransceiver, TransceiverDirection, MediaKind, SdpSession, SdpMedia, SdpDirection, SdpParseError};
 pub use rtcp::{RtcpFeedback, RtcpXr, RtcpRr, ReceptionReport, RtcpSr, SenderInfo, RembPacket};
