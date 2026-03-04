@@ -1,17 +1,17 @@
 [package]
 name = "webrtc-core"
-version = "0.6.5"
+version = "0.7.0"
 edition = "2021"
 authors = ["xbl1e"]
-description = "Sub-microsecond WebRTC media core with zero-copy architecture"
+description = "Production-ready WebRTC media core with zero-copy architecture"
 license = "MIT"
 repository = "https://github.com/xbl1e/webrtc-core"
 readme = "README.md"
-keywords = ["webrtc", "rtc", "media", "network"]
+keywords = ["webrtc", "rtc", "media", "network", "sfu", "MCU"]
 categories = ["network-programming"]
 
 [dependencies]
-tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "time", "net"] }
+tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "time", "net", "sync", "rt"] }
 thiserror = "1.0"
 bytes = "1.4"
 aes-gcm = "0.10"

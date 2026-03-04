@@ -1,3 +1,5 @@
+pub mod handshake;
+
 use aes_gcm::{
     aead::{AeadInPlace, KeyInit},
     Aes128Gcm, Nonce,

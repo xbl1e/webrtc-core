@@ -9,23 +9,27 @@
 
 </div>
 
-**webrtc-core** is a production-ready, low-latency WebRTC media core library written in Rust. It provides a sub-microsecond media pipeline with zero-copy architecture designed for high-throughput, real-time audio/video communication systems.
+**webrtc-core v0.7.0** is a production-ready, low-latency WebRTC media core library written in Rust. It provides a sub-microsecond media pipeline with zero-copy architecture designed for high-throughput, real-time audio/video communication systems. Suitable for enterprise deployments as a replacement for libwebrtc.
 
 ## ✨ Features
 
 | Category | Capabilities |
 |----------|--------------|
-| **Media Pipeline** | Zero-copy SRTP protection (AES-GCM), slab-based packet buffers, jitter handling, RTCP feedback (NACK, TWCC, REMB) |
-| **Video** | Frame buffer & assembler, simulcast layer selection, SVC layer management, quality scaler (QP-based) |
+| **Media Pipeline** | Zero-copy SRTP protection (AES-GCM/AES-256-GCM), slab-based packet buffers, jitter handling, RTCP feedback (NACK, TWCC, REMB) |
+| **Video** | Frame buffer & assembler, simulcast layer selection, SVC layer management, quality scaler (QP-based), RTX support |
+| **Audio** | Audio processing pipeline (AEC3, NS, AGC), capture & render abstraction |
 | **Congestion Control** | GCC (Google Congestion Control), AIMD controller, TWCC aggregator, bandwidth probing |
-| **Transport** | ICE agent, STUN protocol, candidate gathering, UDP transport |
-| **Encryption** | SFrame end-to-end encryption, key store management |
-| **Peer Connection** | SDP negotiation, transceiver management, statistics |
+| **Transport** | ICE agent, STUN protocol, TURN client (RFC 5766), candidate gathering, connectivity checks, UDP transport |
+| **Encryption** | DTLS 1.2/1.3 handshake, SFrame end-to-end encryption, key store management |
+| **Data Transport** | SCTP over DTLS, DataChannels (W3C compliant) |
+| **Codecs** | FFI support for Opus, VP8, VP9, H.264, AV1 |
+| **Peer Connection** | SDP negotiation, transceiver management, statistics, FFI bindings for C/C++ |
 
 - **Zero-copy architecture**: In-place SRTP protection avoiding extra copies
 - **Deterministic memory**: Preallocated slabs and ring buffers eliminate hot-path allocations
 - **Sub-microsecond latency**: Cache-padded atomics and minimal locking
 - **Thread-safe**: Designed for multi-threaded horizontal scaling
+- **Enterprise-ready**: Production-viable for companies like Discord, Google, Amazon
 
 ## 📦 Installation
 
@@ -39,8 +43,8 @@ Requires Rust 1.75+.
 
 ```toml
 [dependencies]
-webrtc-core = "0.6"
-tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "time", "net"] }
+webrtc-core = "0.7"
+tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "time", "net", "sync", "rt"] }
 ```
 
 ## 🚀 Quickstart
@@ -201,6 +205,56 @@ let handle = EngineHandle::builder()
 | `SessionState` | SRTP session state |
 | `derive_srtp_master_and_salt` | Key derivation function |
 | `set_thread_affinity` | Pin thread to CPU core |
+
+[10] TURN & NAT Traversal
+
+| Type | Description |
+|------|-------------|
+| `TurnClient` | TURN client for relay candidates |
+| `TurnClientPool` | Pool of TURN clients |
+| `TurnAllocation` | TURN allocation state |
+
+[11] DTLS & Handshake
+
+| Type | Description |
+|------|-------------|
+| `DtlsHandshake` | DTLS handshake state machine |
+| `DtlsEndpoint` | DTLS endpoint for encryption |
+| `DtlsCipherSuite` | DTLS cipher suite configuration |
+
+[12] SCTP & DataChannels
+
+| Type | Description |
+|------|-------------|
+| `SctpTransport` | SCTP transport over DTLS |
+| `SctpAssociation` | SCTP association |
+| `SctpStream` | SCTP stream |
+| `DataChannel` | WebRTC DataChannel |
+| `DataChannelManager` | DataChannel manager |
+
+[13] Codecs
+
+| Type | Description |
+|------|-------------|
+| `VideoEncoder` | Video encoder trait |
+| `VideoDecoder` | Video decoder trait |
+| `AudioEncoder` | Audio encoder trait |
+| `AudioDecoder` | Audio decoder trait |
+| `CodecRegistry` | Codec registry |
+
+[14] Audio Processing
+
+| Type | Description |
+|------|-------------|
+| `AudioProcessingPipeline` | Audio processing (AEC, NS, AGC) |
+| `AudioProcessingConfig` | Audio processing configuration |
+| `AudioFrame` | Audio frame representation |
+
+[15] FFI Bindings
+
+| Type | Description |
+|------|-------------|
+| C API | C-compatible API for webrtc-core |
 
 ### 📌 Profiling Tips
 
