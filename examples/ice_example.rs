@@ -22,8 +22,8 @@ fn main() {
     agent.add_remote_candidate(remote);
     println!("State: {:?}", agent.state());
 
-    agent.simulate_successful_check();
-    println!("Connected: {}", agent.is_connected());
+    agent.perform_connectivity_check("192.168.1.200:6000".parse().unwrap());
+    println!("Checks sent: {}", agent.checks_sent());
     
     if let Some(addr) = agent.selected_address() {
         println!("Selected: {}", addr);

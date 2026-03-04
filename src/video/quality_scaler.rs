@@ -1,5 +1,9 @@
 use std::sync::atomic::{AtomicI32, AtomicU32, AtomicU64, Ordering};
 
+/// Quality scaler for adaptive bitrate video.
+///
+/// NOTE: This component is not currently connected to the media pipeline.
+/// To use, integrate with the congestion controller to receive QP feedback.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScalingDecision {
     KeepResolution,

@@ -1,5 +1,9 @@
 use std::sync::atomic::{AtomicU8, Ordering};
 
+/// Scalable Video Coding (SVC) mode configuration.
+///
+/// NOTE: This component is not currently connected to the media pipeline.
+/// To use, integrate with VP9/AV1 encoder for layer-based encoding.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SvcMode {
     L1T1,

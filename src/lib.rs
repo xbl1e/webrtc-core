@@ -29,6 +29,15 @@ pub mod audio;
 pub mod sctp;
 pub mod datachannel;
 
+// Infrastructure modules
+pub mod timer;
+pub mod transport;
+pub mod events;
+
+// Advanced features
+pub mod rtx;
+pub mod pacer;
+
 pub use affinity::set_thread_affinity;
 pub use byte_ring::ByteRing;
 pub use clock::ClockDriftEstimator;
@@ -59,3 +68,12 @@ pub use codecs::{CodecType, VideoEncoder, VideoDecoder, AudioEncoder, AudioDecod
 pub use audio::{AudioFrame, AudioProcessingPipeline, AudioProcessingConfig, AudioProcessingError, AecMode, NoiseSuppressionLevel, AgcMode};
 pub use sctp::{SctpTransport, SctpAssociation, SctpStream, SctpMessage, SctpError, SctpState};
 pub use datachannel::{DataChannel, DataChannelManager, DataChannelConfig, DataChannelState, DataChannelMessage, DataChannelError};
+
+// Infrastructure exports
+pub use timer::{TimerWheel, TimerHandle};
+pub use transport::{UdpEndpoint, TransportError, IncomingPacket, socket_pair};
+pub use events::{EventEmitter, PeerConnectionEvents, IceCandidateEvent, IceConnectionState, PeerConnectionState, SignalingState, MediaKind, TrackEvent, DataChannelEvent, DataChannelType, IceGatheringState, IceCandidateError};
+
+// RTX and Pacer exports
+pub use rtx::{RtxSender, RtxReceiver, RtxConfig, PacketHistory, PacketToRetransmit, RtxRecoveredPacket, PacketPriority};
+pub use pacer::{Pacer, PacerConfig, PacedPacket, PacerStats};

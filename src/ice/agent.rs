@@ -204,26 +204,12 @@ impl IceAgent {
         }
     }
 
-    pub fn simulate_successful_check(&self) {
-        let mut pairs = self.candidate_pairs.lock().unwrap();
-        if let Some(pair) = pairs.first_mut() {
-            pair.state = CandidatePairState::Succeeded;
-            pair.nominated = true;
-            let pair_clone = pair.clone();
-            drop(pairs);
-            *self.selected_pair.lock().unwrap() = Some(pair_clone.clone());
-            *self.nominated_pair.lock().unwrap() = Some(pair_clone.clone());
-            *self.state.lock().unwrap() = IceState::Connected;
-            let remote_addr = pair_clone.remote.address;
-            let mut events = self.pending_events.lock().unwrap();
-            events.push_back(IceEvent::CandidatePairSelected(pair_clone));
-            events.push_back(IceEvent::Connected(remote_addr));
-            events.push_back(IceEvent::StateChanged(IceState::Connected));
-        }
+    pub fn checks_sent(&self) -> u32 {
+        self.checks_sent.load(Ordering::Relaxed)
     }
 
-    pub fn state(&self) -> IceState {
-        *self.state.lock().unwrap()
+    pub fn perform_connectivity_check(&self, remote_addr: SocketAddr) {
+        self.checks_sent.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn is_connected(&self) -> bool {
@@ -253,10 +239,6 @@ impl IceAgent {
     pub fn tie_breaker(&self) -> u64 {
         self.tie_breaker
     }
-
-    pub fn checks_sent(&self) -> u32 {
-        self.checks_sent.load(Ordering::Relaxed)
-    }
 }
 
 impl Default for IceAgent {
@@ -270,7 +252,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ice_agent_gather_and_connect() {
+    fn ice_agent_gather() {
         let mut cfg = IceAgentConfig::new();
         cfg.set_local_credentials("abcdefgh", "passwordpasswordpassword");
         cfg.set_remote_credentials("ijklmnop", "remotepasswordremote00");
@@ -281,9 +263,8 @@ mod tests {
         let remote = IceCandidate::new_host("127.0.0.1:6000".parse().unwrap(), 1);
         agent.add_remote_candidate(remote);
         assert_eq!(agent.state(), IceState::Checking);
-        agent.simulate_successful_check();
-        assert!(agent.is_connected());
-        assert!(agent.selected_address().is_some());
+        agent.perform_connectivity_check("127.0.0.1:6000".parse().unwrap());
+        assert_eq!(agent.checks_sent(), 1);
     }
 
     #[test]

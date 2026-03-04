@@ -1,6 +1,10 @@
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
 use super::frame::VideoResolution;
 
+/// Simulcast layer configuration for multi-layer video encoding.
+///
+/// NOTE: This component is not currently connected to the media pipeline.
+/// To use, integrate with the video encoder and transceiver layer selection.
 #[derive(Clone, Debug)]
 pub struct SimulcastLayer {
     pub rid: [u8; 16],
