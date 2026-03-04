@@ -9,7 +9,7 @@
 
 </div>
 
-**webrtc-core v0.7.0** is a production-ready, low-latency WebRTC media core library written in Rust. It provides a sub-microsecond media pipeline with zero-copy architecture designed for high-throughput, real-time audio/video communication systems. Suitable for enterprise deployments as a replacement for libwebrtc.
+**webrtc-core** is a production-ready, low-latency WebRTC media core library written in Rust. It provides a sub-microsecond media pipeline with zero-copy architecture designed for high-throughput, real-time audio/video communication systems. Suitable for enterprise deployments as a replacement for libwebrtc.
 
 ## ✨ Features
 

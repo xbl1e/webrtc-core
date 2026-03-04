@@ -1,5 +1,4 @@
 use std::sync::atomic::{AtomicU8, Ordering};
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SvcMode {
     L1T1,
