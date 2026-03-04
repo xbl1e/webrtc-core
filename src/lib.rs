@@ -24,11 +24,17 @@ pub mod ice;
 pub mod observability;
 pub mod pc;
 
+pub mod codecs;
+pub mod audio;
+pub mod sctp;
+pub mod datachannel;
+
 pub use affinity::set_thread_affinity;
 pub use byte_ring::ByteRing;
 pub use clock::ClockDriftEstimator;
 pub use dtls::{DtlsContext, DtlsEndpoint, DtlsRole, DtlsState, DtlsError, DtlsRecordHeader, DtlsCipherSuite, DtlsSecurityParameters};
 pub use dtls_key::{derive_srtp_master_and_salt, KeyDeriveError};
+pub use dtls::handshake::{DtlsHandshake, HandshakeState, HandshakeError};
 pub use engine_handle::{EngineHandle, EngineBuilder};
 pub use index_ring::IndexRing;
 pub use jitter_buffer::AudioJitterBuffer;
@@ -44,7 +50,12 @@ pub use rtp::{MediaPacket, PacketType, VideoMetadata, RtpHeader, RtpExtension, R
 pub use video::{VideoFrame, VideoCodec, VideoFrameType, SvcMode, SvcLayer, VideoResolution, VideoFrameBuffer, FrameAssembler, SvcLayerSelector, SimulcastConfig, SimulcastLayer, SimulcastSelector, QualityScaler, QualityScalerConfig, ScalingDecision};
 pub use cc::{GccController, GccConfig, AimdController, TwccAggregator, TwccFeedback, BandwidthUsage, AimdConfig, ProbeController, ProbeConfig, ProbeResult, CongestionController, CongestionStats};
 pub use e2ee::{SFrameContext, SFrameConfig, KeyStore, SFrameError};
-pub use ice::{IceCandidate, IceAgent, IceRole, IceState, StunMessage, CandidateType, TransportProtocol, StunAttribute, StunMethod, StunClass, StunError, IceAgentConfig};
+pub use ice::{IceCandidate, IceAgent, IceRole, IceState, StunMessage, CandidateType, TransportProtocol, StunAttribute, StunMethod, StunClass, StunError, IceAgentConfig, TurnClient, TurnClientPool, TurnError, TurnState, TurnAllocation};
 pub use observability::{EngineMetrics, StreamMetrics, MetricsSnapshot};
 pub use pc::{PeerConnection, PeerConnectionState, SignalingState, RtcConfiguration, IceServer, IceTransportPolicy, BundlePolicy, RtcStatsReport, RtcStats, InboundRtpStats, OutboundRtpStats, IceCandidatePairStats, SessionDescription, RtpTransceiver, TransceiverDirection, MediaKind, SdpSession, SdpMedia, SdpDirection, SdpParseError};
 pub use rtcp::{RtcpFeedback, RtcpXr, RtcpRr, ReceptionReport, RtcpSr, SenderInfo, RembPacket};
+
+pub use codecs::{CodecType, VideoEncoder, VideoDecoder, AudioEncoder, AudioDecoder, VideoFrame as CodecVideoFrame, EncodedFrame, AudioEncoderConfig, VideoEncoderConfig, VideoDecoderConfig, AudioApplication};
+pub use audio::{AudioFrame, AudioProcessingPipeline, AudioProcessingConfig, AudioProcessingError, AecMode, NoiseSuppressionLevel, AgcMode};
+pub use sctp::{SctpTransport, SctpAssociation, SctpStream, SctpMessage, SctpError, SctpState};
+pub use datachannel::{DataChannel, DataChannelManager, DataChannelConfig, DataChannelState, DataChannelMessage, DataChannelError};
