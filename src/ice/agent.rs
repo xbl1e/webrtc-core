@@ -179,7 +179,7 @@ impl IceAgent {
             let mut c = IceCandidate::new_host(addr, 1);
             c.set_foundation(&format!("host{}", addr.port()));
             c.set_ufrag(self.cfg.local_ufrag_str());
-            events.push_back(IceEvent::CandidateGathered(c.clone()));
+            events.push_back(IceEvent::CandidateGathered(c));
             candidates.push(c);
         }
         self.gathering_done.store(true, Ordering::Release);
@@ -188,8 +188,6 @@ impl IceAgent {
     }
 
     pub fn add_remote_candidate(&self, candidate: IceCandidate) {
-        let mut remote = self.remote_candidates.lock().unwrap();
-        remote.push(candidate.clone());
         let local = self.local_candidates.lock().unwrap();
         let is_controlling = self.role == IceRole::Controlling;
         let mut pairs = self.candidate_pairs.lock().unwrap();
@@ -198,6 +196,8 @@ impl IceAgent {
             pairs.push(pair);
         }
         pairs.sort_by(|a, b| b.priority.cmp(&a.priority));
+        let mut remote = self.remote_candidates.lock().unwrap();
+        remote.push(candidate);
         let mut state = self.state.lock().unwrap();
         if *state == IceState::Gathering || *state == IceState::New {
             *state = IceState::Checking;

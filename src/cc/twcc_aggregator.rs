@@ -1,6 +1,7 @@
 use crossbeam_utils::CachePadded;
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicU16, AtomicU64, AtomicUsize, Ordering};
+use std::sync::Mutex;
 
 const TWCC_WINDOW: usize = 256;
 
@@ -24,6 +25,7 @@ pub struct TwccFeedback {
 struct ArrivalSlot {
     arrival: UnsafeCell<PacketArrival>,
     valid: std::sync::atomic::AtomicBool,
+    lock: Mutex<()>,
 }
 
 unsafe impl Send for ArrivalSlot {}
@@ -34,6 +36,7 @@ impl ArrivalSlot {
         Self {
             arrival: UnsafeCell::new(PacketArrival::default()),
             valid: std::sync::atomic::AtomicBool::new(false),
+            lock: Mutex::new(()),
         }
     }
 }
@@ -78,6 +81,7 @@ impl TwccAggregator {
     pub fn on_packet_sent(&self, transport_seq: u16, send_time_ns: u64, size_bytes: usize) {
         let idx = (transport_seq as usize) & self.mask;
         let slot = &self.slots[idx];
+        let _guard = slot.lock.lock().ok();
         let arrival = PacketArrival {
             transport_seq,
             send_time_ns,
@@ -93,6 +97,7 @@ impl TwccAggregator {
     pub fn on_packet_received(&self, transport_seq: u16, recv_time_ns: u64) {
         let idx = (transport_seq as usize) & self.mask;
         let slot = &self.slots[idx];
+        let _guard = slot.lock.lock().ok();
         if slot.valid.load(Ordering::Acquire) {
             unsafe {
                 let a = &mut *slot.arrival.get();
@@ -231,5 +236,33 @@ mod tests {
         let fb = agg.compute_feedback();
         assert_eq!(fb.sent_count, 2);
         assert_eq!(fb.received_count, 2);
+    }
+
+    #[test]
+    fn twcc_concurrent_send_receive() {
+        use std::thread;
+        use std::sync::Arc;
+
+        let agg = Arc::new(TwccAggregator::new());
+
+        let agg_send = agg.clone();
+        let send_handle = thread::spawn(move || {
+            for i in 0..100u16 {
+                agg_send.on_packet_sent(i, 1_000_000 * i as u64, 1200);
+            }
+        });
+
+        let agg_recv = agg.clone();
+        let recv_handle = thread::spawn(move || {
+            for i in 0..80u16 {
+                agg_recv.on_packet_received(i, 2_000_000 * i as u64);
+            }
+        });
+
+        send_handle.join().ok();
+        recv_handle.join().ok();
+
+        assert_eq!(agg.total_sent(), 100);
+        assert_eq!(agg.total_received(), 80);
     }
 }

@@ -29,12 +29,10 @@ pub mod audio;
 pub mod sctp;
 pub mod datachannel;
 
-// Infrastructure modules
 pub mod timer;
 pub mod transport;
 pub mod events;
 
-// Advanced features
 pub mod rtx;
 pub mod pacer;
 
@@ -52,7 +50,7 @@ pub use media_engine::{MediaEngine, Metrics, MediaError, Idle, Running, Closed};
 pub use packet::AudioPacket;
 pub use rtcp_queue::RtcpSendQueue;
 pub use session::SessionState;
-pub use slab::{SlabAllocator, SlabGuard};
+pub use slab::{SlabAllocator, SlabGuard, SlabKey};
 pub use engine_shard::{EngineShard, EngineStats};
 
 pub use rtp::{MediaPacket, PacketType, VideoMetadata, RtpHeader, RtpExtension, RtpExtensionMap, CsrcList, VideoRotation, Packetizer, PacketizerConfig, Depacketizer, DepacketizerError};
@@ -69,11 +67,9 @@ pub use audio::{AudioFrame, AudioProcessingPipeline, AudioProcessingConfig, Audi
 pub use sctp::{SctpTransport, SctpAssociation, SctpStream, SctpMessage, SctpError, SctpState};
 pub use datachannel::{DataChannel, DataChannelManager, DataChannelConfig, DataChannelState, DataChannelMessage, DataChannelError};
 
-// Infrastructure exports
 pub use timer::{TimerWheel, TimerHandle};
 pub use transport::{UdpEndpoint, TransportError, IncomingPacket, socket_pair};
 pub use events::{EventEmitter, PeerConnectionEvents, IceCandidateEvent, IceConnectionState, PeerConnectionState, SignalingState, MediaKind, TrackEvent, DataChannelEvent, DataChannelType, IceGatheringState, IceCandidateError};
 
-// RTX and Pacer exports
 pub use rtx::{RtxSender, RtxReceiver, RtxConfig, PacketHistory, PacketToRetransmit, RtxRecoveredPacket, PacketPriority};
 pub use pacer::{Pacer, PacerConfig, PacedPacket, PacerStats};

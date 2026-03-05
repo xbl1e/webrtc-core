@@ -1,4 +1,5 @@
 use crate::packet::AudioPacket;
+use crate::slab::SlabKey;
 use aes_gcm::{
     aead::{AeadInPlace, KeyInit, Tag},
     Aes256Gcm, Nonce,
@@ -60,22 +61,66 @@ impl SrtpContext {
     pub fn protect_index_inplace(
         &self,
         slab: &crate::slab::SlabAllocator,
-        idx: usize,
+        key: &SlabKey,
         nonce12: &[u8; 12],
         aad: &[u8],
     ) -> Result<usize, ()> {
-        let pkt = unsafe { slab.get_mut(idx) };
+        let pkt = slab.get_mut(key).ok_or(())?;
         self.protect_inplace(pkt, nonce12, aad)
     }
 
     pub fn unprotect_index_inplace(
         &self,
         slab: &crate::slab::SlabAllocator,
-        idx: usize,
+        key: &SlabKey,
         nonce12: &[u8; 12],
         aad: &[u8],
     ) -> Result<usize, ()> {
-        let pkt = unsafe { slab.get_mut(idx) };
+        let pkt = slab.get_mut(key).ok_or(())?;
         self.unprotect_inplace(pkt, nonce12, aad)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn srtp_protect_unprotect() {
+        let key = [0u8; 32];
+        let nonce = [0u8; 12];
+        let ctx = SrtpContext::new(&key);
+
+        let mut pkt = AudioPacket::from_slice(&[1, 2, 3, 4, 5]);
+        let original_len = pkt.len;
+
+        assert!(ctx.protect_inplace(&mut pkt, &nonce, &[]).is_ok());
+        assert!(pkt.len > original_len);
+
+        assert!(ctx.unprotect_inplace(&mut pkt, &nonce, &[]).is_ok());
+        assert_eq!(pkt.len, original_len);
+        assert_eq!(&pkt.data[..original_len], &[1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn srtp_with_slab() {
+        use crate::slab::SlabAllocator;
+        let slab = SlabAllocator::new(16);
+        let key = [0u8; 32];
+        let nonce = [0u8; 12];
+        let ctx = SrtpContext::new(&key);
+
+        let slab_key = slab.allocate().unwrap();
+        if let Some(pkt) = slab.get_mut(&slab_key) {
+            pkt.len = 5;
+            pkt.data[..5].copy_from_slice(&[1, 2, 3, 4, 5]);
+        }
+
+        assert!(ctx.protect_index_inplace(&slab, &slab_key, &nonce, &[]).is_ok());
+        assert!(ctx.unprotect_index_inplace(&slab, &slab_key, &nonce, &[]).is_ok());
+
+        if let Some(pkt) = slab.get_mut(&slab_key) {
+            assert_eq!(&pkt.data[..5], &[1, 2, 3, 4, 5]);
+        }
     }
 }

@@ -37,6 +37,11 @@ pub struct WcStatsReport {
     _private: [u8; 0],
 }
 
+#[repr(C)]
+pub struct WcTransceiver {
+    _private: [u8; 0],
+}
+
 pub type WcOnIceCandidateCallback = extern "C" fn(*mut c_void, *const c_char);
 pub type WcOnDataChannelCallback = extern "C" fn(*mut c_void, *mut WcDataChannel);
 pub type WcOnConnectionStateCallback = extern "C" fn(*mut c_void, c_int);
@@ -55,7 +60,7 @@ pub extern "C" fn wc_peer_connection_create(config_json: *const c_char) -> *mut 
             RtcConfiguration::default()
         }
     };
-    
+
     let pc = PeerConnection::new(cfg);
     let boxed = Box::new(pc);
     Box::into_raw(boxed) as *mut WcPeerConnection
@@ -76,7 +81,7 @@ pub extern "C" fn wc_peer_connection_create_offer(pc: *mut WcPeerConnection) -> 
     if pc.is_null() {
         return std::ptr::null_mut();
     }
-    
+
     unsafe {
         let pc = &*(pc as *mut PeerConnection);
         match pc.create_offer() {
@@ -94,7 +99,7 @@ pub extern "C" fn wc_peer_connection_create_answer(pc: *mut WcPeerConnection) ->
     if pc.is_null() {
         return std::ptr::null_mut();
     }
-    
+
     unsafe {
         let pc = &*(pc as *mut PeerConnection);
         match pc.create_answer() {
@@ -116,24 +121,24 @@ pub extern "C" fn wc_peer_connection_set_local_description(
     if pc.is_null() || sdp.is_null() {
         return -1;
     }
-    
+
     unsafe {
         let pc = &*(pc as *mut PeerConnection);
         let c_str = CStr::from_ptr(sdp);
         let sdp_str = c_str.to_string_lossy();
-        
+
         let sdp_type = match sdp_type {
             0 => crate::pc::SdpType::Offer,
             1 => crate::pc::SdpType::Answer,
             2 => crate::pc::SdpType::PrAnswer,
             _ => return -1,
         };
-        
+
         let desc = crate::pc::SessionDescription {
             sdp_type,
             sdp: sdp_str.to_string(),
         };
-        
+
         match pc.set_local_description(desc) {
             Ok(_) => 0,
             Err(_) => -1,
@@ -150,24 +155,24 @@ pub extern "C" fn wc_peer_connection_set_remote_description(
     if pc.is_null() || sdp.is_null() {
         return -1;
     }
-    
+
     unsafe {
         let pc = &*(pc as *mut PeerConnection);
         let c_str = CStr::from_ptr(sdp);
         let sdp_str = c_str.to_string_lossy();
-        
+
         let sdp_type = match sdp_type {
             0 => crate::pc::SdpType::Offer,
             1 => crate::pc::SdpType::Answer,
             2 => crate::pc::SdpType::PrAnswer,
             _ => return -1,
         };
-        
+
         let desc = crate::pc::SessionDescription {
             sdp_type,
             sdp: sdp_str.to_string(),
         };
-        
+
         match pc.set_remote_description(desc) {
             Ok(_) => 0,
             Err(_) => -1,
@@ -179,11 +184,11 @@ pub extern "C" fn wc_peer_connection_set_remote_description(
 pub extern "C" fn wc_peer_connection_add_transceiver(
     pc: *mut WcPeerConnection,
     kind: c_int,
-) -> *mut c_void {
+) -> *mut WcTransceiver {
     if pc.is_null() {
         return std::ptr::null_mut();
     }
-    
+
     unsafe {
         let pc = &*(pc as *mut PeerConnection);
         let media_kind = match kind {
@@ -191,10 +196,19 @@ pub extern "C" fn wc_peer_connection_add_transceiver(
             1 => MediaKind::Video,
             _ => return std::ptr::null_mut(),
         };
-        
+
         let tc = pc.add_transceiver(media_kind);
-        let ptr = Arc::into_raw(tc) as *mut c_void;
+        let ptr = Arc::into_raw(tc) as *mut WcTransceiver;
         ptr
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn wc_transceiver_free(tr: *mut WcTransceiver) {
+    if !tr.is_null() {
+        unsafe {
+            let _ = Arc::from_raw(tr as *mut crate::pc::RtpTransceiver);
+        }
     }
 }
 
@@ -208,18 +222,18 @@ pub extern "C" fn wc_peer_connection_create_data_channel(
     if pc.is_null() || label.is_null() {
         return std::ptr::null_mut();
     }
-    
+
     unsafe {
         let c_str = CStr::from_ptr(label);
         let label_str = c_str.to_string_lossy();
-        
+
         let config = DataChannelConfig {
             label: label_str.to_string(),
             ordered: ordered != 0,
             max_retransmits: if max_retransmits >= 0 { Some(max_retransmits as u16) } else { None },
             ..Default::default()
         };
-        
+
         let channel = DataChannel::new(0, config);
         let boxed = Box::new(channel);
         Box::into_raw(boxed) as *mut WcDataChannel
@@ -241,7 +255,7 @@ pub extern "C" fn wc_peer_connection_get_state(pc: *mut WcPeerConnection) -> c_i
     if pc.is_null() {
         return -1;
     }
-    
+
     unsafe {
         let pc = &*(pc as *mut PeerConnection);
         match pc.state() {
@@ -272,12 +286,12 @@ pub extern "C" fn wc_data_channel_send_text(
     if channel.is_null() || message.is_null() {
         return -1;
     }
-    
+
     unsafe {
         let channel = &*(channel as *mut DataChannel);
         let c_str = CStr::from_ptr(message);
         let msg = c_str.to_string_lossy();
-        
+
         match channel.send_text(&msg) {
             Ok(_) => 0,
             Err(_) => -1,
@@ -294,11 +308,11 @@ pub extern "C" fn wc_data_channel_send_binary(
     if channel.is_null() || data.is_null() || len <= 0 {
         return -1;
     }
-    
+
     unsafe {
         let channel = &*(channel as *mut DataChannel);
         let slice = std::slice::from_raw_parts(data as *const u8, len as usize);
-        
+
         match channel.send_binary(slice) {
             Ok(_) => 0,
             Err(_) => -1,
@@ -311,7 +325,7 @@ pub extern "C" fn wc_data_channel_get_state(channel: *mut WcDataChannel) -> c_in
     if channel.is_null() {
         return -1;
     }
-    
+
     unsafe {
         let channel = &*(channel as *mut DataChannel);
         match channel.state() {
@@ -328,7 +342,7 @@ pub extern "C" fn wc_data_channel_get_buffered_amount(channel: *mut WcDataChanne
     if channel.is_null() {
         return -1;
     }
-    
+
     unsafe {
         let channel = &*(channel as *mut DataChannel);
         channel.buffered_amount() as c_int
@@ -349,10 +363,23 @@ pub extern "C" fn wc_session_description_get_sdp(sdp: *mut WcSessionDescription)
     if sdp.is_null() {
         return std::ptr::null_mut();
     }
-    
+
     unsafe {
         let sdp = &*(sdp as *mut crate::pc::SessionDescription);
-        CString::new(sdp.sdp.clone()).unwrap().into_raw()
+        let c_string = CString::new(sdp.sdp.as_str());
+        match c_string {
+            Ok(s) => s.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn wc_string_free(s: *mut c_char) {
+    if !s.is_null() {
+        unsafe {
+            let _ = CString::from_raw(s);
+        }
     }
 }
 
@@ -361,7 +388,7 @@ pub extern "C" fn wc_session_description_get_type(sdp: *mut WcSessionDescription
     if sdp.is_null() {
         return -1;
     }
-    
+
     unsafe {
         let sdp = &*(sdp as *mut crate::pc::SessionDescription);
         match sdp.sdp_type {
@@ -395,16 +422,16 @@ pub extern "C" fn wc_ice_agent_gather_candidates(agent: *mut c_void, ip: *const 
     if agent.is_null() || ip.is_null() {
         return;
     }
-    
+
     unsafe {
         let agent = &*(agent as *mut IceAgent);
         let c_str = CStr::from_ptr(ip);
         let ip_str = c_str.to_string_lossy();
-        
+
         let addr: std::net::SocketAddr = format!("{}:{}", ip_str, port)
             .parse()
-            .unwrap();
-        
+            .unwrap_or_else(|_| "127.0.0.1:0".parse().unwrap());
+
         agent.gather_host_candidates(&[addr]);
     }
 }
@@ -414,16 +441,16 @@ pub extern "C" fn wc_ice_agent_add_remote_candidate(agent: *mut c_void, ip: *con
     if agent.is_null() || ip.is_null() {
         return;
     }
-    
+
     unsafe {
         let agent = &*(agent as *mut IceAgent);
         let c_str = CStr::from_ptr(ip);
         let ip_str = c_str.to_string_lossy();
-        
+
         let addr: std::net::SocketAddr = format!("{}:{}", ip_str, port)
             .parse()
-            .unwrap();
-        
+            .unwrap_or_else(|_| "127.0.0.1:0".parse().unwrap());
+
         let candidate = crate::ice::IceCandidate::new_host(addr, 1);
         agent.add_remote_candidate(candidate);
     }
@@ -434,7 +461,7 @@ pub extern "C" fn wc_ice_agent_get_state(agent: *mut c_void) -> c_int {
     if agent.is_null() {
         return -1;
     }
-    
+
     unsafe {
         let agent = &*(agent as *mut IceAgent);
         match agent.state() {
@@ -454,7 +481,7 @@ pub extern "C" fn wc_ice_agent_is_connected(agent: *mut c_void) -> c_int {
     if agent.is_null() {
         return 0;
     }
-    
+
     unsafe {
         let agent = &*(agent as *mut IceAgent);
         if agent.is_connected() { 1 } else { 0 }
@@ -483,7 +510,7 @@ pub extern "C" fn wc_dtls_endpoint_get_state(endpoint: *mut c_void) -> c_int {
     if endpoint.is_null() {
         return -1;
     }
-    
+
     unsafe {
         let endpoint = &*(endpoint as *mut DtlsEndpoint);
         match endpoint.state() {
@@ -513,7 +540,8 @@ pub extern "C" fn wc_sctp_transport_free(transport: *mut c_void) {
 
 #[no_mangle]
 pub extern "C" fn wc_version() -> *const c_char {
-    CString::new("0.7.0").unwrap().into_raw()
+    static VERSION: &str = "0.7.1";
+    VERSION.as_ptr() as *const c_char
 }
 
 #[cfg(test)]
@@ -546,7 +574,7 @@ mod tests {
         let version = wc_version();
         unsafe {
             let c_str = CStr::from_ptr(version);
-            assert_eq!(c_str.to_string_lossy(), "0.7.0");
+            assert_eq!(c_str.to_string_lossy(), "0.7.1");
         }
     }
 }

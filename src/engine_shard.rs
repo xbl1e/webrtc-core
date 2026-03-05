@@ -4,7 +4,7 @@ use crate::{
     latency_ring::LatencyRing,
     rtcp_queue::RtcpSendQueue,
     session::SessionState,
-    slab::SlabAllocator,
+    slab::{SlabAllocator, SlabKey},
 
 };
 use std::sync::{
@@ -74,7 +74,7 @@ impl EngineShard {
     fn now_ns() -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or(Duration::ZERO)
             .as_nanos() as u64
     }
 
@@ -100,8 +100,8 @@ impl EngineShard {
         s
     }
 
-    pub fn enqueue_index(&self, idx: usize) -> bool {
-        self.idx.push(idx)
+    pub fn enqueue_index(&self, idx: SlabKey) -> bool {
+        self.idx.push(idx.index())
     }
 
     pub fn set_congestion(&self, v: bool) {
@@ -117,8 +117,12 @@ impl EngineShard {
     }
 
     pub fn get_ewma_delay_ms(&self) -> u64 {
-        let jb = self.jitter.lock().unwrap();
-        jb.get_ewma_delay_ms()
+        let jb = self.jitter.lock().ok();
+        if let Some(jb) = jb {
+            jb.get_ewma_delay_ms()
+        } else {
+            0
+        }
     }
 
     pub fn is_congested(&self) -> bool {
@@ -129,33 +133,43 @@ impl EngineShard {
         self.stats.dropped_layer1.load(Ordering::Relaxed) + self.stats.dropped_layer2.load(Ordering::Relaxed)
     }
 
-    fn handle_incoming_index(&self, slot_idx: usize, arrival: u64) {
+    fn handle_incoming_index(&self, slot_key: SlabKey, arrival: u64) {
         self.stats.pps.fetch_add(1, Ordering::Relaxed);
-        let jb = self.jitter.lock().unwrap();
-        let enq = jb.push_index_with_seq(slot_idx, arrival, &self.slab);
-        if !enq {
-            self.stats.dropped_packets.fetch_add(1, Ordering::Relaxed);
-            self.slab.free(slot_idx);
+        let jb = self.jitter.lock().ok();
+        if let Some(jb) = jb {
+            let enq = jb.push_index_with_seq(slot_key, arrival, &self.slab);
+            if !enq {
+                self.stats.dropped_packets.fetch_add(1, Ordering::Relaxed);
+                self.slab.free(slot_key);
+            }
+        } else {
+            self.slab.free(slot_key);
         }
     }
 
     fn poll_step(&self) {
         loop {
-            let maybe = { let jb = self.jitter.lock().unwrap(); jb.pop_index() };
+            let maybe = {
+                let jb = self.jitter.lock().ok();
+                jb.and_then(|j| j.pop_index())
+            };
             match maybe {
-                Some(slot_idx) => {
-                    let pkt = unsafe { self.slab.get_mut(slot_idx) };
+                Some(slot_key) => {
+                    let pkt = if let Some(p) = self.slab.get_mut(&slot_key) { p } else { continue };
                     let now_ns = Self::now_ns();
                     let latency = now_ns.saturating_sub(pkt.timestamp);
                     let _ = self.latency.push(latency);
-                    let cur_delay_ms = { let jb = self.jitter.lock().unwrap(); jb.get_ewma_delay_ms() };
+                    let cur_delay_ms = {
+                        let jb = self.jitter.lock().ok();
+                        jb.map(|j| j.get_ewma_delay_ms()).unwrap_or(0)
+                    };
                     if cur_delay_ms > 50 {
                         self.congestion.store(true, Ordering::Release);
                     } else {
                         self.congestion.store(false, Ordering::Release);
                     }
                     if self.congestion.load(Ordering::Acquire) && pkt.layer > 0 {
-                        self.slab.free(slot_idx);
+                        self.slab.free(slot_key);
                         self.stats.dropped_packets.fetch_add(1, Ordering::Relaxed);
                         match pkt.layer {
                             0 => { self.stats.dropped_layer0.fetch_add(1, Ordering::Relaxed); }
@@ -165,12 +179,15 @@ impl EngineShard {
                         }
                         continue;
                     }
-                    let maybe_srtp = { let s = self.session.read().unwrap(); s.srtp() };
+                    let maybe_srtp = {
+                        let s = self.session.read().ok();
+                        s.and_then(|session| session.srtp())
+                    };
                     if let Some(srtp) = maybe_srtp {
                         let nonce = [0u8;12];
-                        let _ = srtp.protect_index_inplace(&self.slab, slot_idx, &nonce, &[]);
+                        let _ = srtp.protect_index_inplace(&self.slab, &slot_key, &nonce, &[]);
                     }
-                    self.slab.free(slot_idx);
+                    self.slab.free(slot_key);
                 }
                 None => break,
             }
@@ -181,21 +198,33 @@ impl EngineShard {
     }
 
     fn maybe_resize_jitter(&self) {
-        let jitter_ms = { let jb = self.jitter.lock().unwrap(); jb.get_ewma_delay_ms() as usize };
-        let target = (jitter_ms.saturating_mul(2)).max(16);
-        let mut jb = self.jitter.lock().unwrap();
-        let cur = jb.capacity();
-        if target != cur && target > 0 && target < 65536 {
-            *jb = AudioJitterBuffer::new(target);
+        let jitter_ms = {
+            let jb = self.jitter.lock().ok();
+            jb.map(|j| j.get_ewma_delay_ms() as usize).unwrap_or(0)
+        };
+        let target = jitter_ms.saturating_mul(2).max(16);
+        let mut jb = self.jitter.lock().ok();
+        if let Some(jb) = jb.as_mut() {
+            let cur = jb.capacity();
+            if target != cur && target > 0 && target < 65536 {
+                *jb = AudioJitterBuffer::new(target);
+            }
         }
     }
 
     fn emit_nack_if_needed(&self) {
         let now_ns = Self::now_ns();
-        let jb_snapshot = { let jb = self.jitter.lock().unwrap(); jb.check_and_emit_nack(now_ns) };
+        let jb_snapshot = {
+            let jb = self.jitter.lock().ok();
+            jb.map(|j| j.check_and_emit_nack(now_ns)).unwrap_or(false)
+        };
         if jb_snapshot {
             let mut buf = [0u8;512];
-            let n = crate::rtcp::RtcpFeedback::write_nack_into(&self.jitter.lock().unwrap(), &self.slab, &mut buf);
+            let n = {
+                let jb = self.jitter.lock().ok();
+                jb.and_then(|j| crate::rtcp::RtcpFeedback::write_nack_into(&j, &self.slab, &mut buf))
+                    .unwrap_or(0)
+            };
             if n > 0 { let _ = self.rtcp.push_drop_oldest(&buf[..n]); }
         }
     }
@@ -207,7 +236,7 @@ impl EngineShard {
         buf.truncate(n);
         buf.sort_unstable();
         let idx = ((n as f64) * 0.99).ceil() as usize;
-        let ix = idx.saturating_sub(1).min(n-1);
+        let ix = idx.saturating_sub(1).min(n.saturating_sub(1));
         let p99 = buf[ix];
         self.stats.latency_p99.store(p99, Ordering::Relaxed);
     }

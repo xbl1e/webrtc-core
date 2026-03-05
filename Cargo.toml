@@ -1,9 +1,9 @@
 [package]
 name = "webrtc-core"
-version = "0.7.1"
+version = "1.0.0"
 edition = "2021"
 authors = ["xbl1e"]
-description = "Production-ready WebRTC media core with zero-copy architecture"
+description = "Beta WebRTC media core with zero-copy architecture"
 license = "MIT"
 repository = "https://github.com/xbl1e/webrtc-core"
 readme = "README.md"

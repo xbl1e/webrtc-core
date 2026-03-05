@@ -1,4 +1,4 @@
-use crate::slab::SlabAllocator;
+use crate::slab::{SlabAllocator, SlabKey};
 use crossbeam_utils::CachePadded;
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
@@ -6,7 +6,7 @@ use std::ptr;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 pub struct AudioJitterBuffer {
-    slots: Box<[UnsafeCell<MaybeUninit<usize>>]>,
+    slots: Box<[UnsafeCell<MaybeUninit<SlabKey>>]>,
     capacity: usize,
     mask: usize,
     head: CachePadded<AtomicUsize>,
@@ -38,7 +38,7 @@ impl AudioJitterBuffer {
         }
     }
 
-    pub fn push_index(&self, idx_val: usize) -> bool {
+    pub fn push_index(&self, key: SlabKey) -> bool {
         let tail = self.tail.load(Ordering::Relaxed);
         let head = self.head.load(Ordering::Acquire);
         if tail.wrapping_sub(head) >= self.capacity {
@@ -47,21 +47,19 @@ impl AudioJitterBuffer {
         let idx = tail & self.mask;
         unsafe {
             let slot = self.slots.get_unchecked(idx).get();
-            ptr::write((*slot).as_mut_ptr(), idx_val);
+            ptr::write((*slot).as_mut_ptr(), key);
         }
         self.tail.store(tail.wrapping_add(1), Ordering::Release);
         true
     }
 
-    pub fn pop_index(&self) -> Option<usize> {
+    pub fn pop_index(&self) -> Option<SlabKey> {
         let head = self.head.load(Ordering::Relaxed);
         let tail = self.tail.load(Ordering::Acquire);
         if head == tail {
             return None;
         }
         let idx = head & self.mask;
-
-
 
         let v = unsafe {
             let slot = self.slots.get_unchecked(idx).get();
@@ -81,12 +79,13 @@ impl AudioJitterBuffer {
                 let s = self.slots.get_unchecked(idx).get();
                 ptr::read((*s).as_ptr())
             };
-            let seq = unsafe { slab.get_mut(slot).seq };
-            if written < out.len() {
-                out[written] = seq;
-                written += 1;
-            } else {
-                break;
+            if let Some(pkt) = slab.get_mut(&slot) {
+                if written < out.len() {
+                    out[written] = pkt.seq;
+                    written += 1;
+                } else {
+                    break;
+                }
             }
         }
         written
@@ -102,15 +101,17 @@ impl AudioJitterBuffer {
                 let s = self.slots.get_unchecked(idx).get();
                 ptr::read((*s).as_ptr())
             };
-            let seq = unsafe { slab.get_mut(slot).seq };
-            if seq != 0 {
-                let s = seq;
-                if largest == 0 {
-                    largest = s
-                };
-                let bit = (s.wrapping_sub(largest)) as i64;
-                if bit <= 0 && bit >= -63 {
-                    mask |= 1u64 << (-(bit) as u64);
+            if let Some(pkt) = slab.get_mut(&slot) {
+                let seq = pkt.seq;
+                if seq != 0 {
+                    let s = seq;
+                    if largest == 0 {
+                        largest = s
+                    };
+                    let bit = (s.wrapping_sub(largest)) as i64;
+                    if bit <= 0 && bit >= -63 {
+                        mask |= 1u64 << (-(bit) as u64);
+                    }
                 }
             }
         }
@@ -119,7 +120,7 @@ impl AudioJitterBuffer {
 
     pub fn push_index_with_seq(
         &self,
-        idx_val: usize,
+        key: SlabKey,
         arrival_ns: u64,
         slab: &SlabAllocator,
     ) -> bool {
@@ -131,12 +132,17 @@ impl AudioJitterBuffer {
         let idx = tail & self.mask;
         unsafe {
             let slot = self.slots.get_unchecked(idx).get();
-            ptr::write((*slot).as_mut_ptr(), idx_val);
+            ptr::write((*slot).as_mut_ptr(), key);
         }
-        let seq = unsafe { slab.get_mut(idx_val).seq };
-        let sample = {
-            let pkt = unsafe { slab.get_mut(idx_val) };
+        let seq = if let Some(pkt) = slab.get_mut(&key) {
+            pkt.seq
+        } else {
+            0
+        };
+        let sample = if let Some(pkt) = slab.get_mut(&key) {
             arrival_ns.saturating_sub(pkt.timestamp)
+        } else {
+            0
         };
         let alpha_num: u128 = 1;
         let alpha_den: u128 = 10;
@@ -183,5 +189,50 @@ impl AudioJitterBuffer {
 
     pub fn get_ewma_delay_ms(&self) -> u64 {
         self.ewma_delay_ns.load(Ordering::Relaxed) / 1_000_000u64
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    #[test]
+    fn jitter_buffer_basic() {
+        let slab = Arc::new(SlabAllocator::new(8));
+        let jb = AudioJitterBuffer::new(4);
+
+        let key = slab.allocate().unwrap();
+        if let Some(pkt) = slab.get_mut(&key) {
+            pkt.seq = 1;
+            pkt.timestamp = 1000;
+        }
+        assert!(jb.push_index_with_seq(key, 2000, &slab));
+        assert_eq!(jb.pop_index(), Some(key));
+    }
+
+    #[test]
+    fn jitter_buffer_capacity() {
+        let slab = Arc::new(SlabAllocator::new(8));
+        let jb = AudioJitterBuffer::new(4);
+
+        let mut keys = Vec::new();
+        for i in 0..8 {
+            if let Some(k) = slab.allocate() {
+                keys.push(k);
+            }
+        }
+
+        let mut count = 0;
+        for key in keys {
+            if let Some(pkt) = slab.get_mut(&key) {
+                pkt.seq = count as u16;
+                pkt.timestamp = 1000;
+            }
+            if jb.push_index_with_seq(key, 2000, &slab) {
+                count += 1;
+            }
+        }
+        assert!(count <= 4);
     }
 }

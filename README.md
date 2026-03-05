@@ -5,13 +5,17 @@
 [![crates.io](https://img.shields.io/crates/v/webrtc-core.svg)](https://crates.io/crates/webrtc-core)
 [![docs.rs](https://img.shields.io/docsrs/webrtc-core)](https://docs.rs/webrtc-core)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![status](https://img.shields.io/badge/status-production-brightgreen.svg)](#enterprise-readiness)
+[![status](https://img.shields.io/badge/status-beta-yellow.svg)](#enterprise-readiness)
 
 </div>
 
-**webrtc-core** is a production-ready, low-latency WebRTC media core library written in Rust. It provides a sub-microsecond media pipeline with zero-copy architecture designed for high-throughput, real-time audio/video communication systems. Suitable for enterprise deployments as a replacement for libwebrtc.
+**webrtc-core** is a beta WebRTC media core library written in Rust. It provides a low-latency media pipeline with zero-copy architecture designed for high-throughput, real-time audio/video communication systems.
 
-## ✨ Features
+## Status: Beta
+
+This is a beta release. The library is functional but may contain bugs and the API may change. Use with caution in production environments and report any issues found.
+
+## Features
 
 | Category | Capabilities |
 |----------|--------------|
@@ -25,13 +29,15 @@
 | **Codecs** | FFI support for Opus, VP8, VP9, H.264, AV1 |
 | **Peer Connection** | SDP negotiation, transceiver management, statistics, FFI bindings for C/C++ |
 
+## Architecture Highlights
+
 - **Zero-copy architecture**: In-place SRTP protection avoiding extra copies
 - **Deterministic memory**: Preallocated slabs and ring buffers eliminate hot-path allocations
-- **Sub-microsecond latency**: Cache-padded atomics and minimal locking
+- **Low latency**: Cache-padded atomics and minimal locking
 - **Thread-safe**: Designed for multi-threaded horizontal scaling
-- **Enterprise-ready**: Production-viable for companies like Discord, Google, Amazon
+- **Memory safety**: Uses Rust's ownership model with SlabKey generation counters to prevent use-after-free
 
-## 📦 Installation
+## Installation
 
 ```bash
 cargo add webrtc-core
@@ -43,11 +49,11 @@ Requires Rust 1.75+.
 
 ```toml
 [dependencies]
-webrtc-core = "0.7"
+webrtc-core = "1.0"
 tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "time", "net", "sync", "rt"] }
 ```
 
-## 🚀 Quickstart
+## Quickstart
 
 ### Minimal Usage
 
@@ -57,7 +63,6 @@ use webrtc_core::EngineHandle;
 let handle = EngineHandle::builder().build();
 let payload = vec![0u8; 160];
 
-// Feed audio packet (seq, ssrc)
 handle.feed_packet(&payload, 1u16, 0x1234).ok();
 ```
 
@@ -68,7 +73,6 @@ use webrtc_core::EngineHandle;
 
 let handle = EngineHandle::builder().build();
 
-// Provide SRTP keying material (in-place protection for future packets)
 let key = [0u8; 32];
 handle.provide_keying_material(key);
 
@@ -76,51 +80,53 @@ let payload = vec![0u8; 160];
 handle.feed_packet(&payload, 1u16, 0x1234).ok();
 ```
 
-### Full Async Example with RTCP
-
-```rust
-use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::net::UdpSocket;
-use webrtc_core::EngineHandle;
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let addr: SocketAddr = "127.0.0.1:9000".parse()?;
-    let peer: SocketAddr = "127.0.0.1:9001".parse()?;
-    let socket = Arc::new(UdpSocket::bind(addr).await?);
-
-    let handle = EngineHandle::builder().build();
-    let rtcp_task = handle.start_rtcp_sender(socket.clone(), peer);
-
-    // Feed packets
-    let payload = vec![0u8; 160];
-    for i in 0..100u16 {
-        let _ = handle.feed_packet(&payload, i, 0x1234);
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    }
-
-    let _ = rtcp_task.await;
-    Ok(())
-}
-```
-
-## ⚙️ Configuration
+## Configuration
 
 Customize the `EngineHandle` with the builder pattern:
 
 ```rust
 let handle = EngineHandle::builder()
-    .jitter_capacity(2048)    // Jitter buffer capacity (default: 1024)
-    .slab_capacity(8192)      // Packet slab capacity (default: 4096)
-    .index_capacity(8192)     // Index ring capacity (default: 4096)
-    .rtcp_capacity(512)      // RTCP queue capacity (default: 256)
+    .jitter_capacity(2048)
+    .slab_capacity(8192)
+    .index_capacity(8192)
+    .rtcp_capacity(512)
     .build();
 ```
 
-## 🔌 Core API
+## Memory Safety
 
-[1] Engine
+The library uses several mechanisms to ensure memory safety:
+
+1. **SlabKey with generation counters**: Prevents use-after-free in the slab allocator
+2. **SPSC/MPSC ring buffers**: Proper memory ordering for lock-free structures
+3. **Safe Rust APIs**: All unsafe code is properly documented with invariants
+
+See the documentation for details on safe usage patterns.
+
+## Limitations
+
+- Beta status - API may change
+- Limited codec support (mostly via FFI)
+- FFI memory management requires careful attention
+- No comprehensive fuzzing coverage yet
+- Performance benchmarks are isolated measurements, not real-world metrics
+
+## Roadmap to v1.0.0
+
+- [x] Fix critical memory safety bugs
+- [x] Improve concurrency safety
+- [x] Fix FFI memory leaks
+- [x] Document all unsafe code
+- [x] Add comprehensive unit tests
+- [ ] Add integration tests
+- [ ] Add fuzzing coverage
+- [ ] Performance benchmarks on real hardware
+- [ ] Documentation examples
+- [ ] Stability review
+
+## Core API
+
+### Engine
 
 | Type | Description |
 |------|-------------|
@@ -129,19 +135,20 @@ let handle = EngineHandle::builder()
 | `EngineShard` | Internal processing loop |
 | `EngineStats` | Runtime statistics |
 
-[2] Memory & Primitives
+### Memory & Primitives
 
 | Type | Description |
 |------|-------------|
 | `SlabAllocator` | Deterministic packet memory allocation |
+| `SlabKey` | Safe handle for slab allocations with generation counters |
 | `SlabGuard` | RAII guard for slab allocations |
-| `ByteRing` | Lock-free byte queue |
-| `IndexRing` | Lock-free index queue |
-| `LatencyRing` | P99 latency measurements |
+| `ByteRing` | Lock-free byte queue (SPSC) |
+| `IndexRing` | Lock-free index queue (SPSC) |
+| `LatencyRing` | P99 latency measurements (SPSC) |
 | `AudioJitterBuffer` | Audio jitter handling with gap detection |
-| `RtcpSendQueue` | RTCP feedback queue |
+| `RtcpSendQueue` | RTCP feedback queue (MPSC) |
 
-[3] RTP & Video
+### RTP & Video
 
 | Type | Description |
 |------|-------------|
@@ -153,7 +160,7 @@ let handle = EngineHandle::builder()
 | `VideoCodec` | Supported video codecs |
 | `FrameAssembler` | Video frame assembly |
 
-[4] Congestion Control
+### Congestion Control
 
 | Type | Description |
 |------|-------------|
@@ -163,7 +170,7 @@ let handle = EngineHandle::builder()
 | `ProbeController` | Bandwidth probing |
 | `CongestionController` | Unified congestion control interface |
 
-[5] Encryption
+### Encryption
 
 | Type | Description |
 |------|-------------|
@@ -172,7 +179,7 @@ let handle = EngineHandle::builder()
 | `KeyStore` | End-to-end encryption key management |
 | `SrtpContext` | SRTP/AES-GCM protection |
 
-[6] ICE & Networking
+### ICE & Networking
 
 | Type | Description |
 |------|-------------|
@@ -180,7 +187,7 @@ let handle = EngineHandle::builder()
 | `IceCandidate` | ICE candidate representation |
 | `StunMessage` | STUN protocol messages |
 
-[7] Peer Connection
+### Peer Connection
 
 | Type | Description |
 |------|-------------|
@@ -189,7 +196,7 @@ let handle = EngineHandle::builder()
 | `RtpTransceiver` | RTP transceiver |
 | `SessionDescription` | SDP offer/answer |
 
-[8] Observability
+### Observability
 
 | Type | Description |
 |------|-------------|
@@ -197,95 +204,53 @@ let handle = EngineHandle::builder()
 | `StreamMetrics` | Per-stream metrics |
 | `MetricsSnapshot` | Metrics snapshot |
 
-[9] Other
+## FFI Bindings
 
-| Type | Description |
-|------|-------------|
-| `ClockDriftEstimator` | Clock drift estimation |
-| `SessionState` | SRTP session state |
-| `derive_srtp_master_and_salt` | Key derivation function |
-| `set_thread_affinity` | Pin thread to CPU core |
+See [ffi/README.md](ffi/README.md) for C/C++ API documentation.
 
-[10] TURN & NAT Traversal
+## Troubleshooting
 
-| Type | Description |
-|------|-------------|
-| `TurnClient` | TURN client for relay candidates |
-| `TurnClientPool` | Pool of TURN clients |
-| `TurnAllocation` | TURN allocation state |
-
-[11] DTLS & Handshake
-
-| Type | Description |
-|------|-------------|
-| `DtlsHandshake` | DTLS handshake state machine |
-| `DtlsEndpoint` | DTLS endpoint for encryption |
-| `DtlsCipherSuite` | DTLS cipher suite configuration |
-
-[12] SCTP & DataChannels
-
-| Type | Description |
-|------|-------------|
-| `SctpTransport` | SCTP transport over DTLS |
-| `SctpAssociation` | SCTP association |
-| `SctpStream` | SCTP stream |
-| `DataChannel` | WebRTC DataChannel |
-| `DataChannelManager` | DataChannel manager |
-
-[13] Codecs
-
-| Type | Description |
-|------|-------------|
-| `VideoEncoder` | Video encoder trait |
-| `VideoDecoder` | Video decoder trait |
-| `AudioEncoder` | Audio encoder trait |
-| `AudioDecoder` | Audio decoder trait |
-| `CodecRegistry` | Codec registry |
-
-[14] Audio Processing
-
-| Type | Description |
-|------|-------------|
-| `AudioProcessingPipeline` | Audio processing (AEC, NS, AGC) |
-| `AudioProcessingConfig` | Audio processing configuration |
-| `AudioFrame` | Audio frame representation |
-
-[15] FFI Bindings
-
-| Type | Description |
-|------|-------------|
-| C API | C-compatible API for webrtc-core |
-
-### 📌 Profiling Tips
-
-- Build with `--release` and use `perf` (Linux) or Windows Performance Analyzer
-- For host-optimized results: `RUSTFLAGS='-C target-cpu=native' cargo build --release`
-
-## 🔧 Troubleshooting
-
-[1] High Latency
+### High Latency
 
 - Ensure you're using release builds (`--release`)
 - Tune jitter capacity: `.jitter_capacity(2048)` for more buffering
 - Pin threads to isolated cores with `set_thread_affinity()`
 
-[2] Packet Loss
+### Packet Loss
 
 - Check RTCP NACK feedback: `metrics.audio.snapshot().nack_count`
 - Increase RTCP queue: `.rtcp_capacity(512)`
 - Verify congestion control: check `GccController.target_bitrate_bps()`
 
-[3] Memory Growth
+### Memory Growth
 
 - Pre-allocate with appropriate capacities at startup
 - Monitor slab allocation: track `SlabAllocator::allocated_count()`
 - Use latency monitor: `handle.start_latency_monitor()`
 
-[4] SRTP Errors
+### SRTP Errors
 
 - Ensure keying material is provided before media: `provide_keying_material(key)`
 - Verify key length: SRTP requires 30-byte master key + 14-byte salt
 
-### 📜 Credits
+## Testing
+
+Run tests with:
+
+```bash
+cargo test --all-features
+```
+
+Run with Miri for memory safety validation:
+
+```bash
+cargo +nightly miri test
+```
+
+## Credits
 
 - xbl1e - creator and maintainer
+
+## License
+
+MIT

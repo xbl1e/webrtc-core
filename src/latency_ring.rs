@@ -65,4 +65,84 @@ impl LatencyRing {
         }
         written
     }
+
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    pub fn len(&self) -> usize {
+        let tail = self.tail.load(Ordering::Relaxed);
+        let head = self.head.load(Ordering::Acquire);
+        tail.wrapping_sub(head)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::thread;
+
+    #[test]
+    fn latency_ring_basic() {
+        let ring = LatencyRing::new(8);
+        for i in 0..8u64 {
+            assert!(ring.push(i));
+        }
+        assert!(!ring.push(8));
+
+        let mut out = [0u64; 16];
+        let n = ring.pop_batch(&mut out);
+        assert_eq!(n, 8);
+        for (i, &v) in out[..8].iter().enumerate() {
+            assert_eq!(v, i as u64);
+        }
+    }
+
+    #[test]
+    fn latency_ring_wrap_around() {
+        let ring = LatencyRing::new(4);
+        for i in 0..16u64 {
+            let mut out = [0u64; 1];
+            assert!(ring.push(i));
+            assert_eq!(ring.pop_batch(&mut out), 1);
+            assert_eq!(out[0], i);
+        }
+    }
+
+    #[test]
+    fn latency_ring_spsc_stress() {
+        let ring = std::sync::Arc::new(LatencyRing::new(1024));
+        let rp = ring.clone();
+        let producer = thread::spawn(move || {
+            for i in 0..10000u64 {
+                while !rp.push(i) {
+                    thread::yield_now();
+                }
+            }
+        });
+        let rc = ring.clone();
+        let consumer = thread::spawn(move || {
+            let mut buf = [0u64; 10000];
+            let mut total = 0usize;
+            while total < 10000 {
+                let n = rc.pop_batch(&mut buf[total..]);
+                if n == 0 {
+                    thread::yield_now();
+                    continue;
+                }
+                total += n;
+            }
+            buf
+        });
+        producer.join().ok();
+        let data = consumer.join().ok().unwrap();
+        assert_eq!(data.len(), 10000);
+        for (i, &v) in data.iter().enumerate() {
+            assert_eq!(v, i as u64);
+        }
+    }
 }

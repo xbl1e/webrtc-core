@@ -194,19 +194,6 @@ impl FrameAssembler {
     }
 
     pub fn is_complete(&self) -> bool {
-        for slot in self.fragment_valid.iter() {
-            if !slot.load(Ordering::Acquire) {
-                continue;
-            }
-            let idx = self.fragment_valid.iter().position(|s| {
-                if let Ok(raw_ptr) = std::panic::catch_unwind(|| s as *const AtomicBool) {
-                    raw_ptr == slot as *const AtomicBool
-                } else {
-                    false
-                }
-            });
-            let _ = idx;
-        }
         for i in 0..self.capacity {
             if self.fragment_valid[i].load(Ordering::Acquire) {
                 let s = unsafe { &*self.fragments[i].get() };
@@ -330,5 +317,17 @@ mod tests {
             }
         }
         assert!(count <= buf.capacity());
+    }
+
+    #[test]
+    fn frame_assembler_complete() {
+        let assembler = FrameAssembler::new(8, VideoCodec::Vp8);
+        assert!(!assembler.is_complete());
+
+        assembler.push_rtp_fragment(0, 1000, false, &[0, 1, 2]);
+        assert!(!assembler.is_complete());
+
+        assembler.push_rtp_fragment(1, 1000, true, &[3, 4, 5]);
+        assert!(assembler.is_complete());
     }
 }

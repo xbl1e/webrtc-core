@@ -1,5 +1,5 @@
 use crate::{
-    index_ring::IndexRing, rtcp_queue::RtcpSendQueue, session::SessionState, slab::SlabAllocator,
+    index_ring::IndexRing, rtcp_queue::RtcpSendQueue, session::SessionState, slab::{SlabAllocator, SlabKey},
     engine_shard::EngineShard,
 };
 use std::sync::{
@@ -74,23 +74,23 @@ impl EngineHandle {
     pub fn builder() -> EngineBuilder {
         EngineBuilder::new()
     }
+
     pub fn feed_packet(&self, payload: &[u8], seq: u16, ssrc: u32) -> Result<(), ()> {
         if let Some(guard) = SlabAllocator::allocate_guard(&self.slab) {
-            unsafe {
-                let p = guard.get_mut();
+            if let Some(p) = guard.get_mut() {
                 let len = payload.len().min(p.data.len());
                 p.data[..len].copy_from_slice(&payload[..len]);
                 p.len = len;
                 p.seq = seq;
                 p.timestamp = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or(Duration::ZERO)
                     .as_nanos() as u64;
                 p.ssrc = ssrc;
             }
-            let idx = guard.into_index();
-            if !self.idx_ring.push(idx) {
-                self.slab.free(idx);
+            let key = guard.into_key();
+            if !self.idx_ring.push(key.index()) {
+                self.slab.free(key);
                 return Err(());
             }
             Ok(())
@@ -100,9 +100,10 @@ impl EngineHandle {
     }
 
     pub fn provide_keying_material(&self, key: [u8; 32]) {
-        let mut s = self.session.write().unwrap();
-        let old = std::mem::replace(&mut *s, SessionState::new());
-        *s = old.protect(&key);
+        if let Ok(mut s) = self.session.write() {
+            let old = std::mem::replace(&mut *s, SessionState::new());
+            *s = old.protect(&key);
+        }
     }
 
     pub fn start_rtcp_sender(
@@ -139,9 +140,8 @@ impl EngineHandle {
                 let mut s = buf[..n].to_vec();
                 s.sort_unstable();
                 let idx = ((n as f64) * 0.99).ceil() as usize;
-                let idx = idx.saturating_sub(1).min(n - 1);
+                let idx = idx.saturating_sub(1).min(n.saturating_sub(1));
                 let p99 = s[idx];
-                println!("latency p99 us = {}", p99 / 1000);
             }
         })
     }
@@ -151,5 +151,29 @@ impl EngineHandle {
         if let Some(h) = self.media_handle.take() {
             let _ = h.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn engine_basic_feed() {
+        let handle = EngineHandle::builder().build();
+        let payload = vec![0u8; 160];
+        assert!(handle.feed_packet(&payload, 1u16, 0x1234).is_ok());
+    }
+
+    #[test]
+    fn engine_custom_capacity() {
+        let handle = EngineHandle::builder()
+            .jitter_capacity(2048)
+            .slab_capacity(8192)
+            .index_capacity(8192)
+            .rtcp_capacity(512)
+            .build();
+        let payload = vec![0u8; 160];
+        assert!(handle.feed_packet(&payload, 1u16, 0x1234).is_ok());
     }
 }

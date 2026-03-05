@@ -17,8 +17,6 @@ unsafe impl Sync for IndexRing {}
 
 impl IndexRing {
     pub fn new(capacity: usize) -> Self {
-
-
         let cap = capacity.next_power_of_two().saturating_mul(2);
         let mut v = Vec::with_capacity(cap);
         for _ in 0..cap {
@@ -41,7 +39,6 @@ impl IndexRing {
         }
         let idx = tail & self.mask;
 
-
         unsafe {
             let slot = self.buf.get_unchecked(idx).get();
             ptr::write((*slot).as_mut_ptr(), v);
@@ -58,13 +55,26 @@ impl IndexRing {
         }
         let idx = head & self.mask;
 
-
         let v = unsafe {
             let slot = self.buf.get_unchecked(idx).get();
             ptr::read((*slot).as_ptr())
         };
         self.head.store(head.wrapping_add(1), Ordering::Release);
         Some(v)
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    pub fn len(&self) -> usize {
+        let tail = self.tail.load(Ordering::Relaxed);
+        let head = self.head.load(Ordering::Acquire);
+        tail.wrapping_sub(head)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -110,8 +120,8 @@ mod tests {
             }
             cnt
         });
-        producer.join().unwrap();
-        let res = consumer.join().unwrap();
+        producer.join().ok();
+        let res = consumer.join().ok().unwrap();
         assert_eq!(res, 10000usize);
     }
 }
