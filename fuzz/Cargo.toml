@@ -1,0 +1,36 @@
+[package]
+name = "webrtc-core-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+webrtc-core = { path = ".." }
+
+[[bin]]
+name = "slab"
+path = "fuzz_targets/slab.rs"
+
+[[bin]]
+name = "byte_ring"
+path = "fuzz_targets/byte_ring.rs"
+
+[[bin]]
+name = "index_ring"
+path = "fuzz_targets/index_ring.rs"
+
+[[bin]]
+name = "latency_ring"
+path = "fuzz_targets/latency_ring.rs"
+
+[[bin]]
+name = "rtcp"
+path = "fuzz_targets/rtcp.rs"
+
+[[bin]]
+name = "sdp"
+path = "fuzz_targets/sdp.rs"

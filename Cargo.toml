@@ -30,8 +30,23 @@ nix = { version = "0.27", features = ["sched", "process"] }
 winapi = { version = "0.3", features = ["processthreadsapi"] }
 windows-sys = { version = "0.48" }
 
+[dev-dependencies]
+criterion = "0.5"
+
 [features]
 default = []
+
+[[bench]]
+name = "throughput"
+harness = false
+
+[[bench]]
+name = "latency"
+harness = false
+
+[[bench]]
+name = "concurrency"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true
